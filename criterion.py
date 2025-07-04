@@ -1,13 +1,60 @@
-class Criterion:
+import numpy as np #type:ignore
+from abc import ABC, abstractmethod
+class Criterion(ABC):
+    registry = {}
 
-    def __init__(self, criterion, max_features, min_samples_leaf, random_state):
+    @classmethod
+    def register(cls, name):
+        def wrapper(criterion_class):
+            cls.registry[name] = criterion_class
+            return cls
+        return wrapper
+    
+    @abstractmethod
+    def score(self, y) -> float:
         pass
 
+@Criterion.register('gini')
 class GiniCriterion(Criterion):
-    pass
+    
+    def score(self, y):
+        """
+        Calculate the Gini impurity
+        """
+        t = y.shape[0]
+        if t == 0:
+            return 0
+        
+        p = np.bincount(y) / t
+        return 1 - np.sum(p ** 2)
 
+@Criterion.register('entropy')
 class EntropyCriterion(Criterion):
-    pass
+    
+    def score(self, y):
+        """
+        Calculate the entropy
+        """
+        
+        t = y.shape[0]
+        if t == 0:
+            return 0
+        
+        p = np.bincount(y)/t
+        p = p[p > 0]
+        return -np.sum(p*np.log2(p))
 
+@Criterion.register('logloss')
 class LogLossCriterion(Criterion):
-    pass
+    
+    def score(self, y):
+        """
+        Calculate the log loss
+        """
+        t = y.shape[0]
+        if t == 0:
+            return 0
+        
+        p = np.bincount(y)/t
+        p = p[p>0]
+        return -np.sum(p*np.log(p))

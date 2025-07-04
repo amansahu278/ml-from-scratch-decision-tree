@@ -1,6 +1,7 @@
 # ml-from-scratch-decision-tree
 
 ## Learning
+* Registry
 
 * The modern methods, don't split a node to every value of a discrete variable, it is always a binary split based on subsets of the feature values
 ** Since there can be many subsets (2^(k-1) - 1)
