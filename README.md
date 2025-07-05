@@ -82,8 +82,7 @@ What i learnt while implementing this decision tree from scratch:
 
 ## 🤔 Why From Scratch?
 
-- To demystify how decision trees work under the hood (doing is learning, imo)
-- To provide a foundation for building more advanced models (e.g., random forests, boosting)
+- Understanding how decision trees work under the hood (doing is learning, imo)
 - For educational and research purposes
 
 ---
