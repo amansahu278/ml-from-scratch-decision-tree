@@ -58,3 +58,13 @@ class LogLossCriterion(Criterion):
         p = np.bincount(y)/t
         p = p[p>0]
         return -np.sum(p*np.log(p))
+
+@Criterion.register('mse')
+class MSECriterion(Criterion):
+    
+    def score(self, y):
+        """
+        Calculate the mse
+        """
+        # MSE is variance of the target variable
+        return np.var(y, dtype=float) if y.size > 0 else 0

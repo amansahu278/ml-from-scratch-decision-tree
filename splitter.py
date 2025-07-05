@@ -1,19 +1,20 @@
-import numpy as np #type:ignore
+import numpy as np
+from abc import ABC
+from typing import Optional, Tuple
 
-class Splitter:
+class Splitter(ABC):
     registry = {}
 
-    def __init__(self, criterion, max_features, min_samples_leaf, random_state):
+    def __init__(self, criterion, max_features, random_state):
         self.criterion = criterion
         self.max_features = max_features
-        self.min_samples_leaf = min_samples_leaf
         self.random_state = random_state
 
     @classmethod
     def register(cls, name):
         def wrapper(splitter_class):
             cls.registry[name] = splitter_class
-            return cls
+            return splitter_class
         return wrapper
 
     def _numerical_thresholds(self, values):
@@ -24,7 +25,10 @@ class Splitter:
         thresholds = (unique_values[:-1] + unique_values[1:]) / 2
         return thresholds
 
-    def best_split(self, X, y, categorical_features):
+    def split(self, X, y, categorical_features) -> Tuple[Optional[int], Optional[float], float]:
+        pass
+
+    def _best_split(self, X, y, categorical_features):
         best_feature = None
         best_threshold = None
         best_gain = -np.inf
@@ -51,7 +55,7 @@ class Splitter:
                 y_left = y[left_mask]
                 y_right = y[right_mask]
 
-                # Avoiding division by zero
+                # Avoiding division by
                 if len(y_left) < 1 or len(y_right) < 1:
                     continue
 
@@ -65,13 +69,42 @@ class Splitter:
         
         return best_feature, best_threshold, best_gain
 
-    def random_split(self, X, y):
-        pass
-    
+    def _random_split(self, X, y, categorical_features):
+        
+        np.random_seed(self.random_state)
+        feature = np.random.choice(X.shape[1])
+        values = X[:, feature]
+
+        if feature in categorical_features:
+            threshold = np.random.choice(np.unique(values))
+        else:
+            thresholds = self._numerical_thresholds(values)
+            threshold = np.random.choice(thresholds)
+        
+        if feature in categorical_features:
+            left = values == threshold
+        else:
+            left = values <= threshold
+        right = ~left
+
+        y_left = y[left]
+        y_right = y[right]
+
+        if len(y_left) < 1 or len(y_right) < 1:
+            return None, None, -np.inf
+        
+        parent_score = self.criterion.score(y)
+        weighted_children_score = (len(y_left) * self.criterion.score(y_left) + len(y_right) * self.criterion.score(y_right))/len(y)
+        gain = parent_score - weighted_children_score
+
+        return feature, threshold, gain
+
 @Splitter.register('best')
 class BestSplitter(Splitter):
-    pass
+    def split(self, X, y, categorical_features):
+        return self._best_split(X, y, categorical_features)
 
 @Splitter.register('random')
 class RandomSplitter(Splitter):
-    pass
+    def split(self, X, y, categorical_features):
+        return self._random_split(X, y, categorical_features)

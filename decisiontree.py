@@ -1,5 +1,5 @@
-import numpy as np # type: ignore
-from criterion import Criterion # type: ignore
+import numpy as np
+from criterion import Criterion
 from splitter import Splitter
 
 class Node:
@@ -8,18 +8,23 @@ class Node:
             self.feature_idx = feature
             self.left = left
             self.right = right
-            self.value = value # This is the feature value
+            self.value = value # This is the feature value, or prediction
 
 class DecisionTree:
     
     def __init__(self, criterion='gini', splitter="best", max_depth=None, min_samples_split=2, min_samples_leaf=1, max_features=None, random_state=0, min_impurity_decrease=0, class_weight=None):
         self.tree = None
-        self.criterion = self.get_criterion(criterion) # init criterion here
-        self.splitter = self.get_splitter(splitter)
+        
         self.min_samples_split = min_samples_split
         self.min_samples_leaf = min_samples_leaf
         self.max_depth = max_depth
         self.min_impurity_decrease = min_impurity_decrease
+
+        criterion_class = self.get_criterion(criterion) # init criterion heresplitter_class = self.get_splitter(splitter)
+        self.criterion = criterion_class()
+
+        splitter_class = self.get_splitter(splitter)
+        self.splitter = splitter_class(self.criterion, max_features, random_state) 
 
     def get_criterion(self, criterion_name):
 
@@ -43,6 +48,9 @@ class DecisionTree:
             return True
 
         return False
+    
+    def _traverse(self, sample, node):
+        pass
 
     def _leaf_node(self, y):
         # For classification
@@ -51,6 +59,7 @@ class DecisionTree:
     def _build_tree(self, X, y, depth=0):
         """
         This function is for building the tree through partitioning
+        Note: It is built in a way that internal nodes are always split, so there is no case of an internal node not having either children
         """
 
         # Checking if pure or min_samples_split is met (NOTE: before splitting)
@@ -62,7 +71,7 @@ class DecisionTree:
             return self._leaf_node(y)
 
         # 1. From features, find the best feature to split on
-        feature_idx, threshold, gain = self.splitter.best_split(X, y, self.categorical_features)
+        feature_idx, threshold, gain = self.splitter.split(X, y, self.categorical_features)
 
         # Check min_impurity_decrease
         if gain < self.min_impurity_decrease:
@@ -98,7 +107,29 @@ class DecisionTree:
 
         self._tree = self._build_tree(X, y)
 
+    def visualize(self, node=None, depth=0):
+        node = node or self._tree
+        indent = "  " * depth
+        if node is None:
+            print(f"{indent}None")
+            return
+
+        if node.left is None and node.right is None:
+            print(f"{indent}Leaf: {node.value}")
+            return
+        
+        split_type = "==" if node.feature_idx in self.categorical_features else "<="
+        print(f"{indent} if X[{node.feature_idx}] {split_type} {node.value}:")
+
+        print(f"{indent}--> True:")
+        self.visualize(node.left, depth+1)
+        print(f"{indent}--> False:")
+        self.visualize(node.right, depth+1)
+
     def predict(self, X):
+        pass
+
+    def score(self, X, y):
         pass
 
 class DecisionTreeClassifier(DecisionTree):
@@ -109,20 +140,42 @@ class DecisionTreeClassifier(DecisionTree):
     def _leaf_node(self, y):
         return Node(value=np.bincount(y).argmax())
     
+
+    def _traverse(self, sample, node):
+        
+        # Non leaf nodes
+        while node.left is not None and node.right is not None:
+            val = sample[node.feature_idx]
+            if np.isnan(val):
+                left_pred = self._traverse(sample, node.left)
+                right_pred = self._traverse(sample, node.right)
+                return np.bincount([left_pred, right_pred]).argmax()
+
+            if node.feature_idx in self.categorical_features:
+                if val == node.value:
+                    node = node.left
+                else:
+                    node = node.right
+            else:
+                if val <= node.value:
+                    node = node.left
+                else:
+                    node = node.right       
+        # Leaf node
+        return node.value
+
     def predict(self, X):
         predictions = []
         for sample in X:
             node = self._tree
-            while node.left is not None and node.right is not None:
-                if node.feature_idx is None:
-                    predictions.append(node.value)
-                    break
-                if sample[node.feature_idx] == node.value:
-                    node = node.left
-                else:
-                    node = node.right
-            predictions.append(node.value)
+            prediction = self._traverse(sample, node)
+            predictions.append(prediction)
         return np.array(predictions)
+
+    def score(self, X, y):
+        predictions = self.predict(X)
+        acc = np.mean(predictions==y)
+        return acc
 
 class DecisionTreeRegressor(DecisionTree):
 
@@ -130,19 +183,39 @@ class DecisionTreeRegressor(DecisionTree):
         super().__init__(criterion, splitter, max_depth, min_samples_split, min_samples_leaf, max_features, random_state, min_impurity_decrease, class_weight)
     
     def _leaf_node(self, y):
-        return Node(value=np.bincount(y).argmax())
+        return Node(value=np.mean(y))
     
+    def _traverse(self, sample, node):
+        
+        while node.left is not None and node.right is not None:
+            val = sample[node.feature_idx]
+            if np.isnan(val):
+                left_pred = self._traverse(sample, node.left)
+                right_pred = self._traverse(sample, node.right)
+                return np.mean([left_pred, right_pred])
+
+            if node.feature_idx in self.categorical_features:
+                if val == node.value:
+                    node = node.left
+                else:
+                    node = node.right
+            else:
+                if val <= node.value:
+                    node = node.left
+                else:
+                    node = node.right       
+
+        return node.value
+
     def predict(self, X):
         predictions = []
         for sample in X:
             node = self._tree
-            while node.left is not None and node.right is not None:
-                if node.feature_idx is None:
-                    predictions.append(node.value)
-                    break
-                if sample[node.feature_idx] <= node.value:
-                    node = node.left
-                else:
-                    node = node.right
-            predictions.append(node.value)
+            prediction = self._traverse(sample, node)
+            predictions.append(prediction)
         return np.array(predictions)
+
+    def score(self, X, y):
+        predictions = self.predict(X)
+        mse = np.mean((predictions - y)**2)
+        return mse
